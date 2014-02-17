@@ -157,7 +157,7 @@ install.packages("gplots")
 library("gplots")
 ```
 
-Select subset of expression matrix corresponding to differentially expressed probes and plot heatmap.
+Select subset of expression matrix corresponding to differentially expressed probes and plot heatmap. I was not able to reproduce the heatmap in the paper fully, and I think it has to do with how they cluster the probes.
 
 ```{r}
 exprs.data <- exprs(macrophage.data)[rownames(exprs(macrophage.data)) %in% topProbes2, ]
