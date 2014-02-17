@@ -1,0 +1,167 @@
+BIOST 578 HW 2
+========================================================
+
+We are asked to reproduce the results presented in Figure 2 of this paper: Qian, F., Bolen, C. R., Jing, C., Wang, X., Zheng, W., Zhao, H., et al. (2013). Impaired toll-like receptor 3-mediated immune responses from macrophages of patients chronically infected with hepatitis C virus. Clinical and Vaccine Immunology : CVI, 20(2), 146–155. doi:10.1128/CVI.00530-12
+ 
+# Get the data from GEO
+
+```{r, eval=FALSE}
+## install packages
+source("http://bioconductor.org/biocLite.R")
+biocLite(c("GEOquery", "lumi", "limma"))
+```
+
+```{r, message=FALSE}
+## load the GEOquery package
+library(GEOquery)
+```
+ 
+```{r, eval=FALSE}
+## download data 
+gds <- getGEO("GSE40812", destdir="/Users/jiajin/Desktop/Winter2014/BIOST578/HW/HW2-jjkee")
+```
+The data was downloaded in the compressed (.gz) format. I manually uncompressed the data by clicking on its icon. 
+
+```{r}
+## read the data into R 
+gds <- getGEO(filename = "/Users/jiajin/Desktop/Winter2014/BIOST578/HW/HW2-jjkee/GSE40812_series_matrix.txt")
+```
+
+```{r}
+## function to sanitize data
+sanitize_pdata <- function(pd) {
+  keepCols <- c("title", "characteristics_ch1", "characteristics_ch1.1", "characteristics_ch1.2")
+  pd <- pd[, keepCols]
+  colnames(pd) <- c("ptid", "infection.status", "cell.type", "treatment")
+  pd$ptid <- sapply(pd$ptid, FUN=function(x) {unlist(strsplit(as.character(x), "_"))[2]})  
+  pd$infection.status <- tolower(gsub("infection status: ", "", pd$infection.status))  ## neg/pos 
+  pd$cell.type <- tolower(gsub("cell type: ", "", pd$cell.type))  ## monocyte-derived macrophage/pbmc
+  pd$treatment <- tolower(gsub("treatment: ", "", pd$treatment))  ## poly ic h/mock 
+  return(pd)
+}
+
+## keep a copy of the original data
+gds_original <- gds   
+
+## sanitize data
+pData(gds) <- sanitize_pdata(pData(gds))
+```
+
+# Normalize the data
+
+```{r, message=FALSE}
+## load the lumi package
+library(lumi)
+```
+
+```{r}
+## normalize data 
+gds <- lumiN(gds)
+```
+Note that the expression matrix has actually been quantile normalized using the lumi package. I am doing this step for practice; performing the normalization step again will not change the data. 
+
+# Use limma to test for differential expression
+
+Note that we will only be looking at macrophage samples. This step is comprised of 2 parts. First we have to find the subset of genes (or probes) that are responsive to poly-IC treatment. Secondly, among the subset of genes, find those that are differentially expressed between VL-/VL+ samples.
+
+Get only the macrophage samples from data and sort them by treatment (poly-IC vs mock), infection status (VL- vs VL+) and patient ID. 
+
+```{r}
+macrophage.data <- gds[, pData(gds)$cell.type=="monocyte-derived macrophage"]
+data.order <- with(pData(macrophage.data), order(treatment, infection.status, ptid))
+pData(macrophage.data) <- pData(macrophage.data)[data.order, ]
+exprs(macrophage.data) <- exprs(macrophage.data)[, data.order]
+```
+
+Find the subset of probes (or genes) that are responsive to poly-IC treatment with FDR cutoff of 0.05 and fold change of >1.5.
+
+```{r, message=FALSE}
+# load the limma package
+library(limma)
+```
+
+```{r}
+## test for differential expression using limma
+design1 <- model.matrix(~treatment, macrophage.data)
+fit1 <- lmFit(macrophage.data, design1)
+ebay1 <- eBayes(fit1)
+
+## find differentially expressed genes (or probes) with FDR cutoff of 0.05 and fold change of >1.5
+topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, p.value=0.05, lfc=log2(1.5), sort.by="p")
+topProbes1 <- topTable1$Probe_Id
+
+## check if the number of probes and genes reported in the paper the same as what I found
+## the paper reported they found 1146 poly-IC responsive probes (753 upregulated in poly-IC samples, 393 downregulated in poly-IC samples), which corresponds to 977 poly-IC responsive genes (622 upregulated in poly-IC samples, 355 downregulated in poly-IC samples)
+length(topTable1$Probe_Id)  ## number of responsive probes
+sum(topTable1$logFC > 0)  ## number of upregulated probes
+sum(topTable1$logFC < 0)  ## number of downregulated probes
+length(unique(topTable1$Symbol)[unique(topTable1$Symbol) != ""])  ## number of responsive genes; note there is one gene without a symbol name, need to tell R not to count it
+logFCgtr0 <- unique(topTable1$Symbol[which(topTable1$logFC > 0)]); length(logFCgtr0[logFCgtr0 != ""])  ## number of upregulated genes
+logFCless0 <- unique(topTable1$Symbol[which(topTable1$logFC < 0)]); length(logFCless0[logFCless0 != ""])  ## number of downregulated genes
+```
+
+For each probe found in previous step, we need to first calculate fold change between each subject's paired mock and poly-IC sample.
+
+```{r}
+## select the appropriate subset of data for further analysis
+subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]
+
+## construct matrix to multiply by the expression value matrix such that values that correspond to "mock" samples have a value of 1 and "poly ic h" samples have a value of -1
+treatment.matrix <- matrix(0, nrow=nrow(exprs(subset.data)), ncol=ncol(exprs(subset.data)))
+treatment.matrix[, which(pData(subset.data)$treatment=="mock")] <- 1
+treatment.matrix[, which(pData(subset.data)$treatment=="poly ic h")] <- -1
+
+## construct matrix to identify samples belonging to each patient
+patient.matrix <- model.matrix(~ptid, subset.data)
+
+## modify patient matrix so that the first column corresponds to the first patient
+first.ptid <- pData(subset.data)$ptid[1]
+colnames(patient.matrix)[1] <- paste0("ptid", first.ptid)
+patient.matrix[which(pData(subset.data)$ptid != first.ptid), 1] <- 0 
+
+## calculate fold change between each subject's paired mock and poly-IC sample
+exprs(subset.data) <- (exprs(subset.data) * treatment.matrix) %*% patient.matrix
+
+## limit data to one row per patient (just choose the one corresponding to poly-IC)
+pData(subset.data) <- pData(subset.data)[pData(subset.data)$treatment=="poly ic h", ]  
+```
+
+Now fold change values for VL- patients were compared with those of VL+ patients using limma.
+
+```{r}
+## test for differential expression using limma
+design2 <- model.matrix(~infection.status, subset.data)
+fit2 <- lmFit(subset.data, design2)
+ebay2 <- eBayes(fit2)
+
+## find differentially expressed genes (or probes) with unadjusted p-value < 0.1
+topTable2 <- topTable(ebay2, coef="infection.statuspos", adjust.method="none", number=Inf, p.value=0.1)  
+topProbes2 <- topTable2$Probe_Id
+```
+
+# Display the results using a heatmap
+
+```{r, eval=FALSE}
+## install package
+install.packages("gplots")
+```
+
+```{r, message=FALSE}
+## load package
+library("gplots")
+```
+
+Select subset of expression matrix corresponding to differentially expressed probes and plot heatmap.
+
+```{r}
+exprs.data <- exprs(macrophage.data)[rownames(exprs(macrophage.data)) %in% topProbes2, ]
+
+## plot heatmap
+a <- heatmap.2(exprs.data, key=TRUE, scale="row", density.info="none", trace="none", labRow="", Colv=FALSE, Rowv=FALSE, dendrogram="none", labCol=pData(macrophage.data)$ptid) 
+
+## labeling for heatmap
+mtext("Mock", side=3, line=-4, at=0.37); mtext("|", side=3, line=-4, at=0.55); mtext("Poly I:C", side=3, line=-4, at=0.73)
+mtext("VL-", side=3, line=-5, at=0.28); mtext("|", side=3, line=-5, at=0.37); mtext("VL+", side=3, line=-5, at=0.46)
+mtext("VL-", side=3, line=-5, at=0.63); mtext("|", side=3, line=-5, at=0.75); mtext("VL+", side=3, line=-5, at=0.82)
+```
+
