@@ -92,7 +92,7 @@ topProbes1 <- topTable1$Probe_Id
 
 ## check if the number of probes and genes reported in the paper the same as what I found
 ## the paper reported they found 1146 poly-IC responsive probes (753 upregulated in poly-IC samples, 393 downregulated in poly-IC samples), which corresponds to 977 poly-IC responsive genes (622 upregulated in poly-IC samples, 355 downregulated in poly-IC samples)
-length(topTable1$Probe_Id)  ## number of responsive probes
+length(topProbes1)  ## number of responsive probes
 sum(topTable1$logFC > 0)  ## number of upregulated probes
 sum(topTable1$logFC < 0)  ## number of downregulated probes
 length(unique(topTable1$Symbol)[unique(topTable1$Symbol) != ""])  ## number of responsive genes; note there is one gene without a symbol name, need to tell R not to count it
@@ -137,6 +137,12 @@ ebay2 <- eBayes(fit2)
 ## find differentially expressed genes (or probes) with unadjusted p-value < 0.1
 topTable2 <- topTable(ebay2, coef="infection.statuspos", adjust.method="none", number=Inf, p.value=0.1)  
 topProbes2 <- topTable2$Probe_Id
+
+## check if the number of probes and genes reported in the paper the same as what I found
+## the paper reported they found 43 differentially expressed probes (30 upregulated in VL- samples, 13 upregulated in VL+ samples)
+length(topProbes2)  ## number of probes
+sum(topTable2$logFC > 0)  ## number of upregulated probes in VL+ samples
+sum(topTable2$logFC < 0)  ## number of upregulated probes in VL- samples
 ```
 
 # Display the results using a heatmap
