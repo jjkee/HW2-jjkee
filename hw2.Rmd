@@ -17,15 +17,14 @@ library(GEOquery)
 ```
  
 ```{r, eval=FALSE}
-## download data 
-gds <- getGEO("GSE40812", destdir="/Users/jiajin/Desktop/Winter2014/BIOST578/HW/HW2-jjkee")
+## download and read in data 
+gds <- getGEO("GSE40812", destdir="/Users/jiajin/Desktop/Winter2014/BIOST578/HW/HW2-jjkee/")
 ```
 The data was downloaded in the compressed (.gz) format. I manually uncompressed the data by clicking on its icon. 
 
 ```{r}
 ## read the data into R 
 gds <- getGEO(filename = "/Users/jiajin/Desktop/Winter2014/BIOST578/HW/HW2-jjkee/GSE40812_series_matrix.txt")
-```
 
 ```{r}
 ## function to sanitize data
@@ -82,22 +81,13 @@ library(limma)
 
 ```{r}
 ## test for differential expression using limma
-design1 <- model.matrix(~treatment, macrophage.data)
+design1 <- model.matrix(~treatment+ptid, macrophage.data)  ## adjusting for ptid too because each patient has two samples
 fit1 <- lmFit(macrophage.data, design1)
 ebay1 <- eBayes(fit1)
 
 ## find differentially expressed genes (or probes) with FDR cutoff of 0.05 and fold change of >1.5
 topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, p.value=0.05, lfc=log2(1.5), sort.by="p")
 topProbes1 <- topTable1$Probe_Id
-
-## check if the number of probes and genes reported in the paper the same as what I found
-## the paper reported they found 1146 poly-IC responsive probes (753 upregulated in poly-IC samples, 393 downregulated in poly-IC samples), which corresponds to 977 poly-IC responsive genes (622 upregulated in poly-IC samples, 355 downregulated in poly-IC samples)
-length(topProbes1)  ## number of responsive probes
-sum(topTable1$logFC > 0)  ## number of upregulated probes
-sum(topTable1$logFC < 0)  ## number of downregulated probes
-length(unique(topTable1$Symbol)[unique(topTable1$Symbol) != ""])  ## number of responsive genes; note there is one gene without a symbol name, need to tell R not to count it
-logFCgtr0 <- unique(topTable1$Symbol[which(topTable1$logFC > 0)]); length(logFCgtr0[logFCgtr0 != ""])  ## number of upregulated genes
-logFCless0 <- unique(topTable1$Symbol[which(topTable1$logFC < 0)]); length(logFCless0[logFCless0 != ""])  ## number of downregulated genes
 ```
 
 For each probe found in previous step, we need to first calculate fold change between each subject's paired mock and poly-IC sample.
@@ -149,25 +139,19 @@ sum(topTable2$logFC < 0)  ## number of upregulated probes in VL- samples
 
 ```{r, eval=FALSE}
 ## install package
-install.packages("gplots")
+install.packages("pheatmap")
 ```
 
 ```{r, message=FALSE}
 ## load package
-library("gplots")
+library(pheatmap)
 ```
-
-Select subset of expression matrix corresponding to differentially expressed probes and plot heatmap. I was not able to reproduce the heatmap in the paper fully, and I think it has to do with how they cluster the probes.
 
 ```{r}
 exprs.data <- exprs(macrophage.data)[rownames(exprs(macrophage.data)) %in% topProbes2, ]
 
 ## plot heatmap
-a <- heatmap.2(exprs.data, key=TRUE, scale="row", density.info="none", trace="none", labRow="", Colv=FALSE, Rowv=FALSE, dendrogram="none", labCol=pData(macrophage.data)$ptid) 
-
-## labeling for heatmap
-mtext("Mock", side=3, line=-4, at=0.37); mtext("|", side=3, line=-4, at=0.55); mtext("Poly I:C", side=3, line=-4, at=0.73)
-mtext("VL-", side=3, line=-5, at=0.28); mtext("|", side=3, line=-5, at=0.37); mtext("VL+", side=3, line=-5, at=0.46)
-mtext("VL-", side=3, line=-5, at=0.63); mtext("|", side=3, line=-5, at=0.75); mtext("VL+", side=3, line=-5, at=0.82)
+colnames(exprs.data) <- paste(pData(macrophage.data)$treatment, pData(macrophage.data)$infection.status, pData(macrophage.data)$ptid, sep="_")
+pheatmap(exprs.data, cluster_cols=FALSE) 
 ```
 
