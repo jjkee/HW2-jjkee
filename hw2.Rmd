@@ -18,13 +18,13 @@ library(GEOquery)
  
 ```{r, eval=FALSE}
 ## download and read in data 
-gds <- getGEO("GSE40812", destdir="/Users/jiajin/Desktop/Winter2014/BIOST578/HW/HW2-jjkee/")
+gds <- getGEO("GSE40812", destdir="./Data/")
 ```
 The data was downloaded in the compressed (.gz) format. I manually uncompressed the data by clicking on its icon. 
 
 ```{r}
 ## read the data into R 
-gds <- getGEO(filename = "/Users/jiajin/Desktop/Winter2014/BIOST578/HW/HW2-jjkee/GSE40812_series_matrix.txt")
+gds <- getGEO(filename = "./Data/GSE40812_series_matrix.txt")
 
 ```{r}
 ## function to sanitize data
