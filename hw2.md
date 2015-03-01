@@ -1,11 +1,6 @@
----
-title: "Example: Differential Expression and Heatmap"
-author: "Brian High"
-date: "2/28/2015"
-output: 
-    html_document:
-        keep_md: yes
----
+# Example: Differential Expression and Heatmap
+Brian High  
+2/28/2015  
 
 ## Assignment
 
@@ -35,7 +30,8 @@ Turn on Knitr cache and set other options.
 The code for this code chunk, with slight modification, was taken from 
 [raphg](https://github.com/raphg/Biostat-578).
 
-```{r, cache=FALSE}
+
+```r
 # Set some global knitr options
 library("knitr")
 opts_chunk$set(tidy=FALSE, cache=TRUE, messages=FALSE, fig.width=5, fig.height=7)
@@ -43,13 +39,77 @@ opts_chunk$set(tidy=FALSE, cache=TRUE, messages=FALSE, fig.width=5, fig.height=7
 
 Install the needed packages.
 
-```{r, echo=TRUE}
+
+```r
 packages <- c("GEOmetadb", "GEOquery", "limma", "lumi", "pheatmap", "gplots")
 source("http://bioconductor.org/biocLite.R")
+```
+
+```
+## Bioconductor version 3.0 (BiocInstaller 1.16.1), ?biocLite for help
+```
+
+```r
 for (pkg in packages)
 {
     require(pkg, character.only = TRUE) || biocLite(pkg) 
 }
+```
+
+```
+## Loading required package: GEOmetadb
+## Loading required package: GEOquery
+## Loading required package: Biobase
+## Loading required package: BiocGenerics
+## Loading required package: parallel
+## 
+## Attaching package: 'BiocGenerics'
+## 
+## The following objects are masked from 'package:parallel':
+## 
+##     clusterApply, clusterApplyLB, clusterCall, clusterEvalQ,
+##     clusterExport, clusterMap, parApply, parCapply, parLapply,
+##     parLapplyLB, parRapply, parSapply, parSapplyLB
+## 
+## The following object is masked from 'package:stats':
+## 
+##     xtabs
+## 
+## The following objects are masked from 'package:base':
+## 
+##     Filter, Find, Map, Position, Reduce, anyDuplicated, append,
+##     as.data.frame, as.vector, cbind, colnames, do.call,
+##     duplicated, eval, evalq, get, intersect, is.unsorted, lapply,
+##     mapply, match, mget, order, paste, pmax, pmax.int, pmin,
+##     pmin.int, rank, rbind, rep.int, rownames, sapply, setdiff,
+##     sort, table, tapply, union, unique, unlist, unsplit
+## 
+## Welcome to Bioconductor
+## 
+##     Vignettes contain introductory material; view with
+##     'browseVignettes()'. To cite Bioconductor, see
+##     'citation("Biobase")', and for packages 'citation("pkgname")'.
+## 
+## Setting options('download.file.method.GEOquery'='curl')
+## Loading required package: RSQLite
+## Loading required package: DBI
+## Loading required package: limma
+## 
+## Attaching package: 'limma'
+## 
+## The following object is masked from 'package:BiocGenerics':
+## 
+##     plotMA
+## 
+## Loading required package: lumi
+## Loading required package: pheatmap
+## Loading required package: gplots
+## 
+## Attaching package: 'gplots'
+## 
+## The following object is masked from 'package:stats':
+## 
+##     lowess
 ```
 
 ## Normal analysis workflow
@@ -78,7 +138,8 @@ the paper as our search term.
 
 To do so, we will need to download the GEO SQLite database, `GEOmetadb`.
 
-```{r, echo=TRUE}
+
+```r
 library(GEOmetadb)
 # This will download the entire database, so can be slow
 if(!file.exists("GEOmetadb.sqlite"))
@@ -88,9 +149,30 @@ if(!file.exists("GEOmetadb.sqlite"))
 }
 ```
 
+```
+## Unzipping...
+```
+
+```
+## Warning: closing unused connection 5
+## (http://gbnci.abcc.ncifcrf.gov/geo/GEOmetadb.sqlite.gz)
+```
+
+```
+## Metadata associate with downloaded file:
+##                 name               value
+## 1     schema version                 1.0
+## 2 creation timestamp 2015-02-14 19:49:57
+```
+
+```
+## [1] "/home/high/Documents/HW3-jjkee/GEOmetadb.sqlite"
+```
+
 Then we connect to the database and search for the paper by its title.
 
-```{r, echo=TRUE}
+
+```r
 geo_con <- dbConnect(SQLite(),'GEOmetadb.sqlite')
 query <- "SELECT gse.gse 
             FROM gse 
@@ -103,7 +185,8 @@ res <- dbGetQuery(geo_con, query)
 
 Now we can load the GEO object into an "eset" object (of class "ExpressionSet").
 
-```{r, echo=TRUE}
+
+```r
 library(GEOquery)
 
 # Create the data folder if it does not already exist
@@ -124,6 +207,14 @@ if (file.exists(datafile)) {
 }
 ```
 
+```
+## ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE40nnn/GSE40812/matrix/
+## Found 1 file(s)
+## GSE40812_series_matrix.txt.gz
+## File stored at: 
+## ./Data/GEO//GPL10558.soft
+```
+
 ## Sanitize the data
 
 We only need data for the macrophage "cell type". This is specificed as 
@@ -142,7 +233,8 @@ above. So, one could also parse this "title" to extract the other needed factors
 The method used to sanitize the data is similar to what was covered in 
 [lecture](https://github.com/raphg/Biostat-578/blob/master/Prediction.Rmd).
 
-```{r, echo=TRUE}
+
+```r
 # Function to sanitize data
 sanitize_pdata <- function(pd) {
     # Remove columns we don't need
@@ -179,7 +271,8 @@ From the paper:
 
 If we wanted to use the beadarray package, we could try this instead:
 
-```{r, echo=TRUE, eval=FALSE}
+
+```r
 library(beadarray)
 gds <- neqc(gds)
 ```
@@ -191,9 +284,14 @@ of microarrays.
 
 So, instead, we will use `limiN` from the lumi package.
 
-```{r, echo=TRUE}
+
+```r
 library(lumi)
 gds <- lumiN(gds, method = "quantile")
+```
+
+```
+## Perform quantile normalization ...
 ```
 
 This succeeds because the `lumiN` function expects an ExpressionSet inherited
@@ -204,7 +302,8 @@ object or a data matrix with columns as samples and rows as genes.
 We will only be looking at the macrophage "cell type" so we select only 
 the macrophage data from eset data object. 
 
-```{r, eval=TRUE}
+
+```r
 macrophage.data <- gds[, pData(gds)$cell.type=="monocyte-derived macrophage"]
 ```
 
@@ -215,7 +314,8 @@ vs mock), infection status (VL- vs VL+) and patient ID. This allows us
 to better reproduce the figure 2 heatmap by arranging the samples (columns) 
 as they are presented in that figure.
 
-```{r, echo=TRUE}
+
+```r
 data.order <- with(pData(macrophage.data), 
                    order(treatment, infection.status, ptid))
 pData(macrophage.data) <- pData(macrophage.data)[data.order, ]
@@ -238,7 +338,8 @@ From the paper:
 So let's find subset of probes (or genes) that are responsive to poly-IC 
 treatment with FDR cutoff of 0.05 and fold change of >1.5.
 
-```{r, echo=TRUE}
+
+```r
 library(limma)
 
 # Test for differential expression using limma
@@ -264,7 +365,8 @@ From the paper:
 We will need to subset the data, selecting data matching the probe IDs
 identified in our previous differential expression test.
 
-```{r, echo=TRUE}
+
+```r
 # Select the appropriate subset of data for further analysis
 subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]
 ```
@@ -275,7 +377,8 @@ Now construct a new matrix to multiply by the expression matrix, such that
 values that correspond to "mock" samples have a value of 1 and "poly ic h" 
 samples have a value of -1.
 
-```{r, echo=TRUE}
+
+```r
 treatment.matrix <- matrix(0, nrow=nrow(exprs(subset.data)), 
                            ncol=ncol(exprs(subset.data)))
 treatment.matrix[, which(pData(subset.data)$treatment=="mock")] <- 1
@@ -301,7 +404,8 @@ pData(subset.data) <- pData(subset.data)[pData(subset.data)$treatment=="poly ic 
 Next, calculate the fold change for VL- patients compared with VL+ patients, 
 also using `limma`.
 
-```{r, echo=TRUE}
+
+```r
 # Test for differential expression using limma
 design2 <- model.matrix(~infection.status, subset.data)
 fit2 <- lmFit(subset.data, design2)
@@ -319,10 +423,29 @@ Let's check if the number of probes and genes reported in the paper are the
 same as what we have found. The paper reported finding 43 differentially 
 expressed probes (30 upregulated in VL- samples, 13 upregulated in VL+ samples).
 
-```{r, echo=TRUE}
+
+```r
 length(topProbes2)  ## number of probes
+```
+
+```
+## [1] 43
+```
+
+```r
 sum(topTable2$logFC > 0)  ## number of upregulated probes in VL+ samples
+```
+
+```
+## [1] 30
+```
+
+```r
 sum(topTable2$logFC < 0)  ## number of upregulated probes in VL- samples
+```
+
+```
+## [1] 13
 ```
 
 From the paper:
@@ -334,7 +457,8 @@ From the paper:
 The assignment gave us a hint to use the pheatmap package. First, we'll do some
 data preparation.
 
-```{r, echo=TRUE}
+
+```r
 # Select only those probes matched in the previous differential expression step
 exprs.data <- exprs(macrophage.data)[
     rownames(exprs(macrophage.data)) %in% topProbes2, ]
@@ -347,10 +471,13 @@ colnames(exprs.data) <- paste(pData(macrophage.data)$treatment,
 
 Next, plot using `pheatmap` defaults, except only cluster rows, not columns.
 
-```{r,echo=TRUE}
+
+```r
 library(pheatmap)
 pheatmap(exprs.data, cluster_cols=FALSE) 
 ```
+
+![](hw2_files/figure-html/unnamed-chunk-17-1.png) 
 
 While the default settings produce a nice-looking heatmap, we will need to make
 some adjustments to approach the look of the published heatmap.
@@ -359,7 +486,8 @@ some adjustments to approach the look of the published heatmap.
 
 Primarily, we will use a different color pallete and clustering method.
 
-```{r, echo=TRUE}
+
+```r
 drows <- dist(exprs.data, method = "euclidean")
 hmcols<-colorRampPalette(c("red", "orange", "lightyellow"))(20)
 pheatmap(exprs.data, cluster_cols=FALSE, cluster_rows=TRUE, 
@@ -368,6 +496,12 @@ pheatmap(exprs.data, cluster_cols=FALSE, cluster_rows=TRUE,
          color = hmcols
          ) 
 ```
+
+```
+## The "ward" method has been renamed to "ward.D"; note new "ward.D2"
+```
+
+![](hw2_files/figure-html/unnamed-chunk-18-1.png) 
 
 Using `pheatmap`, we got fairly close to the published figure, but the clustering 
 is still not exactly the same. It looks like it's flipped (vertically, 180 
@@ -383,7 +517,8 @@ We can also use `heatmap` from the stats package, though even with
 `keep.dendro=FALSE`, the dendrogram persists. The clustering is a better 
 match to the published figure.
 
-```{r, echo=TRUE}
+
+```r
 library(stats)
 hmcols<-colorRampPalette(c("red", "orange", "lightyellow"))(20)
 heatmap(exprs.data, Colv=NA, labRow=NA, keep.dendro=FALSE, 
@@ -392,12 +527,15 @@ heatmap(exprs.data, Colv=NA, labRow=NA, keep.dendro=FALSE,
         cexRow=0.5, cexCol=0.5, col=hmcols)
 ```
 
+![](hw2_files/figure-html/unnamed-chunk-19-1.png) 
+
 ### Using `heatmap.2`
 
 Instead, if we use the `heatmap.2` function from the gplots package, we 
 can do a much better job of matching the heatmap in the paper. 
 
-```{r, echo=TRUE}
+
+```r
 library(gplots)
 hclust.ward <- function(x) hclust(x, method="ward.D2")
 dist.eucl <- function(x) dist(x, method="euclidean")
@@ -409,5 +547,7 @@ heatmap.2(exprs.data, scale="row", dendrogram = "none",
           key=TRUE, keysize=1.0
           )
 ```
+
+![](hw2_files/figure-html/unnamed-chunk-20-1.png) 
 
 So, how could we add the custom dendrogram at the top of the figure as published?
