@@ -241,9 +241,11 @@ exprs(macrophage.data) &lt;- exprs(macrophage.data)[, data.order]</code></pre>
 <div id="differential-expression-test-part-i" class="section level3">
 <h3>Differential expression test: Part I</h3>
 <p>So let’s find subset of probes (or genes) that are responsive to poly-IC treatment with FDR cutoff of 0.05 and fold change of &gt;1.5.</p>
+<div id="test-for-differential-expression-with-limma" class="section level4">
+<h4>Test for differential expression with <code>limma</code></h4>
 <pre class="r"><code>library(limma)
 
-# Test for differential expression using limma
+# Test for differential expression with limma
 design1 &lt;- model.matrix(~treatment, macrophage.data)  
 fit1 &lt;- lmFit(macrophage.data, design1)
 ebay1 &lt;- eBayes(fit1)
@@ -262,10 +264,9 @@ topTable1 &lt;- topTable(ebay1, coef=&quot;treatmentpoly ic h&quot;, number=Inf,
 topTable1 &lt;- topTable(ebay1, coef=&quot;treatmentpoly ic h&quot;, number=Inf)
 topTable1 &lt;- topTable1[topTable1$adj.P.Val &lt; 0.05 &amp; abs(topTable1$logFC)&gt;log2(1.5), ]
 nrow(topTable1)</code></pre>
-<p>If we used <code>model.matrix(~treatment+ptid, macrophage.data)</code>, we would have had 1153 probes. Should we include <code>ptid</code> in our model, since every patient has two samples, one treated and the other not treated?</p>
 </div>
-<div id="subset-for-the-number-of-probes-found" class="section level3">
-<h3>Subset for the number of probes found</h3>
+<div id="subset-for-the-number-of-probes-found" class="section level4">
+<h4>Subset for the number of probes found</h4>
 <p>We will need to subset the data, selecting data matching the probe IDs identified in our previous differential expression test.</p>
 <pre class="r"><code># Select the appropriate subset of data for further analysis
 topProbes1 &lt;- topTable1$Probe_Id
@@ -275,6 +276,7 @@ subset.data &lt;- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbe
 <blockquote>
 <p>For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.</p>
 </blockquote>
+</div>
 </div>
 <div id="construct-multiplication-matrix" class="section level3">
 <h3>Construct multiplication matrix</h3>

@@ -238,10 +238,12 @@ From the paper:
 So let's find subset of probes (or genes) that are responsive to poly-IC 
 treatment with FDR cutoff of 0.05 and fold change of >1.5.
 
+#### Test for differential expression with `limma`
+
 ```{r, echo=TRUE}
 library(limma)
 
-# Test for differential expression using limma
+# Test for differential expression with limma
 design1 <- model.matrix(~treatment, macrophage.data)  
 fit1 <- lmFit(macrophage.data, design1)
 ebay1 <- eBayes(fit1)
@@ -267,11 +269,7 @@ topTable1 <- topTable1[topTable1$adj.P.Val < 0.05 & abs(topTable1$logFC)>log2(1.
 nrow(topTable1)
 ```
 
-If we used `model.matrix(~treatment+ptid, macrophage.data)`, we would have had 
-1153 probes. Should we include `ptid` in our model, since every patient has two 
-samples, one treated and the other not treated?
-
-### Subset for the number of probes found
+#### Subset for the number of probes found
 
 We will need to subset the data, selecting data matching the probe IDs
 identified in our previous differential expression test.
