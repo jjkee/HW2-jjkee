@@ -99,59 +99,6 @@ source(&quot;http://bioconductor.org/biocLite.R&quot;)</code></pre>
 {
     require(pkg, character.only = TRUE) || biocLite(pkg) 
 }</code></pre>
-<pre><code>## Loading required package: GEOmetadb
-## Loading required package: GEOquery
-## Loading required package: Biobase
-## Loading required package: BiocGenerics
-## Loading required package: parallel
-## 
-## Attaching package: 'BiocGenerics'
-## 
-## The following objects are masked from 'package:parallel':
-## 
-##     clusterApply, clusterApplyLB, clusterCall, clusterEvalQ,
-##     clusterExport, clusterMap, parApply, parCapply, parLapply,
-##     parLapplyLB, parRapply, parSapply, parSapplyLB
-## 
-## The following object is masked from 'package:stats':
-## 
-##     xtabs
-## 
-## The following objects are masked from 'package:base':
-## 
-##     Filter, Find, Map, Position, Reduce, anyDuplicated, append,
-##     as.data.frame, as.vector, cbind, colnames, do.call,
-##     duplicated, eval, evalq, get, intersect, is.unsorted, lapply,
-##     mapply, match, mget, order, paste, pmax, pmax.int, pmin,
-##     pmin.int, rank, rbind, rep.int, rownames, sapply, setdiff,
-##     sort, table, tapply, union, unique, unlist, unsplit
-## 
-## Welcome to Bioconductor
-## 
-##     Vignettes contain introductory material; view with
-##     'browseVignettes()'. To cite Bioconductor, see
-##     'citation(&quot;Biobase&quot;)', and for packages 'citation(&quot;pkgname&quot;)'.
-## 
-## Setting options('download.file.method.GEOquery'='curl')
-## Loading required package: RSQLite
-## Loading required package: DBI
-## Loading required package: limma
-## 
-## Attaching package: 'limma'
-## 
-## The following object is masked from 'package:BiocGenerics':
-## 
-##     plotMA
-## 
-## Loading required package: lumi
-## Loading required package: pheatmap
-## Loading required package: gplots
-## 
-## Attaching package: 'gplots'
-## 
-## The following object is masked from 'package:stats':
-## 
-##     lowess</code></pre>
 </div>
 <div id="normal-analysis-workflow" class="section level2">
 <h2>Normal analysis workflow</h2>
@@ -297,24 +244,37 @@ exprs(macrophage.data) &lt;- exprs(macrophage.data)[, data.order]</code></pre>
 <pre class="r"><code>library(limma)
 
 # Test for differential expression using limma
-# adjusting for ptid too because each patient has two samples
-design1 &lt;- model.matrix(~treatment+ptid, macrophage.data)  
+design1 &lt;- model.matrix(~treatment, macrophage.data)  
 fit1 &lt;- lmFit(macrophage.data, design1)
 ebay1 &lt;- eBayes(fit1)
 
 # Find differentially expressed genes (or probes) with FDR cutoff of 0.05 
 # and fold change of &gt;1.5
 topTable1 &lt;- topTable(ebay1, coef=&quot;treatmentpoly ic h&quot;, number=Inf, 
-                      p.value=0.05, lfc=log2(1.5), sort.by=&quot;p&quot;)
-topProbes1 &lt;- topTable1$Probe_Id</code></pre>
+                      p.value=0.05, lfc=log2(1.5), sort.by=&quot;p&quot;)</code></pre>
+<p>We should see 1146 probes (sum of upregulated and downregulated probe sets: 753 + 393 = 1146), according to the paper:</p>
+<blockquote>
+<p>After stimulation with TLR3 ligand poly(I·C) for 24 h, we identified 622 genes (corresponding to 753 probe sets) in macrophages that were significantly upregulated and 355 genes (corresponding to 393 probe sets) that were downregulated with an FDR cutoff of 0.05 and a fold change of &gt;1.5 (see Table S1 in the supplemental material).</p>
+</blockquote>
+<pre class="r"><code>nrow(topTable1)</code></pre>
+<pre><code>## [1] 1146</code></pre>
+<pre class="r"><code># Alternatively, you could do it like this ...
+topTable1 &lt;- topTable(ebay1, coef=&quot;treatmentpoly ic h&quot;, number=Inf)
+topTable1 &lt;- topTable1[topTable1$adj.P.Val &lt; 0.05 &amp; abs(topTable1$logFC)&gt;log2(1.5), ]
+nrow(topTable1)</code></pre>
+<p>If we used <code>model.matrix(~treatment+ptid, macrophage.data)</code>, we would have had 1153 probes. Should we include <code>ptid</code> in our model, since every patient has two samples, one treated and the other not treated?</p>
+</div>
+<div id="subset-for-the-number-of-probes-found" class="section level3">
+<h3>Subset for the number of probes found</h3>
+<p>We will need to subset the data, selecting data matching the probe IDs identified in our previous differential expression test.</p>
+<pre class="r"><code># Select the appropriate subset of data for further analysis
+topProbes1 &lt;- topTable1$Probe_Id
+subset.data &lt;- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]</code></pre>
 <p>For each probe found in previous step, we need to first calculate the fold change between each subject’s paired mock and poly-IC samples.</p>
 <p>From the paper:</p>
 <blockquote>
 <p>For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.</p>
 </blockquote>
-<p>We will need to subset the data, selecting data matching the probe IDs identified in our previous differential expression test.</p>
-<pre class="r"><code># Select the appropriate subset of data for further analysis
-subset.data &lt;- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]</code></pre>
 </div>
 <div id="construct-multiplication-matrix" class="section level3">
 <h3>Construct multiplication matrix</h3>

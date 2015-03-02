@@ -56,62 +56,6 @@ for (pkg in packages)
 }
 ```
 
-```
-## Loading required package: GEOmetadb
-## Loading required package: GEOquery
-## Loading required package: Biobase
-## Loading required package: BiocGenerics
-## Loading required package: parallel
-## 
-## Attaching package: 'BiocGenerics'
-## 
-## The following objects are masked from 'package:parallel':
-## 
-##     clusterApply, clusterApplyLB, clusterCall, clusterEvalQ,
-##     clusterExport, clusterMap, parApply, parCapply, parLapply,
-##     parLapplyLB, parRapply, parSapply, parSapplyLB
-## 
-## The following object is masked from 'package:stats':
-## 
-##     xtabs
-## 
-## The following objects are masked from 'package:base':
-## 
-##     Filter, Find, Map, Position, Reduce, anyDuplicated, append,
-##     as.data.frame, as.vector, cbind, colnames, do.call,
-##     duplicated, eval, evalq, get, intersect, is.unsorted, lapply,
-##     mapply, match, mget, order, paste, pmax, pmax.int, pmin,
-##     pmin.int, rank, rbind, rep.int, rownames, sapply, setdiff,
-##     sort, table, tapply, union, unique, unlist, unsplit
-## 
-## Welcome to Bioconductor
-## 
-##     Vignettes contain introductory material; view with
-##     'browseVignettes()'. To cite Bioconductor, see
-##     'citation("Biobase")', and for packages 'citation("pkgname")'.
-## 
-## Setting options('download.file.method.GEOquery'='curl')
-## Loading required package: RSQLite
-## Loading required package: DBI
-## Loading required package: limma
-## 
-## Attaching package: 'limma'
-## 
-## The following object is masked from 'package:BiocGenerics':
-## 
-##     plotMA
-## 
-## Loading required package: lumi
-## Loading required package: pheatmap
-## Loading required package: gplots
-## 
-## Attaching package: 'gplots'
-## 
-## The following object is masked from 'package:stats':
-## 
-##     lowess
-```
-
 ## Normal analysis workflow
 
 We will follow these steps*:
@@ -343,8 +287,7 @@ treatment with FDR cutoff of 0.05 and fold change of >1.5.
 library(limma)
 
 # Test for differential expression using limma
-# adjusting for ptid too because each patient has two samples
-design1 <- model.matrix(~treatment+ptid, macrophage.data)  
+design1 <- model.matrix(~treatment, macrophage.data)  
 fit1 <- lmFit(macrophage.data, design1)
 ebay1 <- eBayes(fit1)
 
@@ -352,7 +295,43 @@ ebay1 <- eBayes(fit1)
 # and fold change of >1.5
 topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, 
                       p.value=0.05, lfc=log2(1.5), sort.by="p")
+```
+
+We should see 1146 probes (sum of upregulated and downregulated probe sets: 753 + 393 = 1146), according to the paper:
+
+> After stimulation with TLR3 ligand poly(I·C) for 24 h, we identified 622 genes (corresponding to 753 probe sets) in macrophages that were significantly upregulated and 355 genes (corresponding to 393 probe sets) that were downregulated with an FDR cutoff of 0.05 and a fold change of >1.5 (see Table S1 in the supplemental material).
+
+
+```r
+nrow(topTable1)
+```
+
+```
+## [1] 1146
+```
+
+
+```r
+# Alternatively, you could do it like this ...
+topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf)
+topTable1 <- topTable1[topTable1$adj.P.Val < 0.05 & abs(topTable1$logFC)>log2(1.5), ]
+nrow(topTable1)
+```
+
+If we used `model.matrix(~treatment+ptid, macrophage.data)`, we would have had 
+1153 probes. Should we include `ptid` in our model, since every patient has two 
+samples, one treated and the other not treated?
+
+### Subset for the number of probes found
+
+We will need to subset the data, selecting data matching the probe IDs
+identified in our previous differential expression test.
+
+
+```r
+# Select the appropriate subset of data for further analysis
 topProbes1 <- topTable1$Probe_Id
+subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]
 ```
 
 For each probe found in previous step, we need to first calculate the fold 
@@ -361,15 +340,6 @@ change between each subject's paired mock and poly-IC samples.
 From the paper:
 
 > For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.
-
-We will need to subset the data, selecting data matching the probe IDs
-identified in our previous differential expression test.
-
-
-```r
-# Select the appropriate subset of data for further analysis
-subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]
-```
 
 ### Construct multiplication matrix
 
@@ -477,7 +447,7 @@ library(pheatmap)
 pheatmap(exprs.data, cluster_cols=FALSE) 
 ```
 
-![](hw2_files/figure-html/unnamed-chunk-17-1.png) 
+![](hw2_files/figure-html/unnamed-chunk-19-1.png) 
 
 While the default settings produce a nice-looking heatmap, we will need to make
 some adjustments to approach the look of the published heatmap.
@@ -501,7 +471,7 @@ pheatmap(exprs.data, cluster_cols=FALSE, cluster_rows=TRUE,
 ## The "ward" method has been renamed to "ward.D"; note new "ward.D2"
 ```
 
-![](hw2_files/figure-html/unnamed-chunk-18-1.png) 
+![](hw2_files/figure-html/unnamed-chunk-20-1.png) 
 
 Using `pheatmap`, we got fairly close to the published figure, but the clustering 
 is still not exactly the same. It looks like it's flipped (vertically, 180 
@@ -527,7 +497,7 @@ heatmap(exprs.data, Colv=NA, labRow=NA, keep.dendro=FALSE,
         cexRow=0.5, cexCol=0.5, col=hmcols)
 ```
 
-![](hw2_files/figure-html/unnamed-chunk-19-1.png) 
+![](hw2_files/figure-html/unnamed-chunk-21-1.png) 
 
 ### Using `heatmap.2`
 
@@ -548,6 +518,6 @@ heatmap.2(exprs.data, scale="row", dendrogram = "none",
           )
 ```
 
-![](hw2_files/figure-html/unnamed-chunk-20-1.png) 
+![](hw2_files/figure-html/unnamed-chunk-22-1.png) 
 
 So, how could we add the custom dendrogram at the top of the figure as published?

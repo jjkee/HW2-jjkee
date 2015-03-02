@@ -43,7 +43,7 @@ opts_chunk$set(tidy=FALSE, cache=TRUE, messages=FALSE, fig.width=5, fig.height=7
 
 Install the needed packages.
 
-```{r, echo=TRUE}
+```{r, echo=TRUE, warn.conflicts = FALSE, quietly=TRUE}
 packages <- c("GEOmetadb", "GEOquery", "limma", "lumi", "pheatmap", "gplots")
 source("http://bioconductor.org/biocLite.R")
 for (pkg in packages)
@@ -242,8 +242,7 @@ treatment with FDR cutoff of 0.05 and fold change of >1.5.
 library(limma)
 
 # Test for differential expression using limma
-# adjusting for ptid too because each patient has two samples
-design1 <- model.matrix(~treatment+ptid, macrophage.data)  
+design1 <- model.matrix(~treatment, macrophage.data)  
 fit1 <- lmFit(macrophage.data, design1)
 ebay1 <- eBayes(fit1)
 
@@ -251,7 +250,36 @@ ebay1 <- eBayes(fit1)
 # and fold change of >1.5
 topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, 
                       p.value=0.05, lfc=log2(1.5), sort.by="p")
+```
+
+We should see 1146 probes (sum of upregulated and downregulated probe sets: 753 + 393 = 1146), according to the paper:
+
+> After stimulation with TLR3 ligand poly(I·C) for 24 h, we identified 622 genes (corresponding to 753 probe sets) in macrophages that were significantly upregulated and 355 genes (corresponding to 393 probe sets) that were downregulated with an FDR cutoff of 0.05 and a fold change of >1.5 (see Table S1 in the supplemental material).
+
+```{r, echo=TRUE}
+nrow(topTable1)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+# Alternatively, you could do it like this ...
+topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf)
+topTable1 <- topTable1[topTable1$adj.P.Val < 0.05 & abs(topTable1$logFC)>log2(1.5), ]
+nrow(topTable1)
+```
+
+If we used `model.matrix(~treatment+ptid, macrophage.data)`, we would have had 
+1153 probes. Should we include `ptid` in our model, since every patient has two 
+samples, one treated and the other not treated?
+
+### Subset for the number of probes found
+
+We will need to subset the data, selecting data matching the probe IDs
+identified in our previous differential expression test.
+
+```{r, echo=TRUE}
+# Select the appropriate subset of data for further analysis
 topProbes1 <- topTable1$Probe_Id
+subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]
 ```
 
 For each probe found in previous step, we need to first calculate the fold 
@@ -260,14 +288,6 @@ change between each subject's paired mock and poly-IC samples.
 From the paper:
 
 > For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.
-
-We will need to subset the data, selecting data matching the probe IDs
-identified in our previous differential expression test.
-
-```{r, echo=TRUE}
-# Select the appropriate subset of data for further analysis
-subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]
-```
 
 ### Construct multiplication matrix
 
