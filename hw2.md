@@ -133,7 +133,7 @@ if (file.exists(datafile)) {
 
 ```
 ## File stored at: 
-## /tmp/RtmpCX9s0l/GPL10558.soft
+## /tmp/RtmpBPddJS/GPL10558.soft
 ```
 
 ## Sanitize the data
@@ -173,6 +173,7 @@ sanitize_pdata <- function(pd) {
                                pd$cell.type))  ## monocyte-derived macrophage/pbmc
     pd$treatment <- tolower(gsub("treatment: ", "", 
                                pd$treatment))  ## poly ic h/mock 
+    pd$treatment <- factor(ifelse(pd$treatment == "mock","mock","polyic"))
     return(pd)
 }
 
@@ -218,7 +219,7 @@ Alternatively, we can use `limiN` from the lumi package:
 
 
 ```r
-library(lumi)
+library(lumi)    # This takes a while to load
 gds <- lumiN(gds, method = "quantile")
 ```
 
@@ -292,13 +293,13 @@ library(limma)
 
 ```r
 # Test for differential expression with limma
-design1 <- model.matrix(~treatment, macrophage.data)  
+design1 <- model.matrix(~treatment+ptid, macrophage.data)  
 fit1 <- lmFit(macrophage.data, design1)
 ebay1 <- eBayes(fit1)
 
 # Find differentially expressed genes (or probes) with FDR cutoff of 0.05 
 # and fold change of >1.5
-topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, sort.by="p",
+topTable1 <- topTable(ebay1, coef="treatmentpolyic", number=Inf, sort.by="p",
                       adjust.method="BH", p.value=0.05, lfc=log2(1.5))
 ```
 
@@ -312,31 +313,34 @@ nrow(topTable1)
 ```
 
 ```
-## [1] 1146
+## [1] 1153
 ```
 
-If you include `ptid` in the `model.matrix`, you will get 1153 probes, which 
-does not match the number found in the paper. 
+Why didn't we get 1146 probes? Because we included the `ptid` in the design 
+matrix.
+
+Since you would expect to see some variability between patients, we include 
+`ptid` in the design.
+
+To try a model just using `treatment`, you could run: 
 
 
 ```r
 library(limma)
 
 # Test for differential expression with limma
-design1 <- model.matrix(~treatment+ptid, macrophage.data)  
+design1 <- model.matrix(~treatment, macrophage.data)  
 fit1 <- lmFit(macrophage.data, design1)
 ebay1 <- eBayes(fit1)
 
 # Find differentially expressed genes (or probes) with FDR cutoff of 0.05 
 # and fold change of >1.5
-topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, sort.by="p",
+topTable1 <- topTable(ebay1, coef="treatmentpolyic", number=Inf, sort.by="p",
                       adjust.method="BH", p.value=0.05, lfc=log2(1.5))
 nrow(topTable1)
 ```
 
-However, since you would expect 
-to see some variability between patients, you might want to include the `ptid` 
-in the matrix. How will that change the results?
+... and you would see 1146 probes.
 
 By the way, if you want to subset by P value and fold change after calculating
 the top table, you can do so as shown below:
@@ -344,7 +348,7 @@ the top table, you can do so as shown below:
 
 ```r
 # Alternatively, you could do it like this ...
-topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf)
+topTable1 <- topTable(ebay1, coef="treatmentpolyic", number=Inf)
 topTable1 <- topTable1[topTable1$adj.P.Val < 0.05 & abs(topTable1$logFC) > log2(1.5), ]
 nrow(topTable1)
 ```
@@ -357,7 +361,6 @@ identified in our previous differential expression test.
 From the paper:
 
 > To identify the genes that might be differentially expressed by macrophages of our subjects cohorts, we limited our analysis to the 977 poly(I·C)-responsive genes (1,146 probe sets).
-
 
 
 ```r
@@ -376,7 +379,7 @@ From the paper:
 > Fold changes were calculated between each subject's paired mock and poly(I·C) sample, and then the fold change values for VL− patients were compared with those of VL+ patients to determine significant gene changes.
 
 Construct a new matrix to multiply by the expression matrix, such that 
-values that correspond to "mock" samples have a value of 1 and "poly ic h" 
+values that correspond to "mock" samples have a value of 1 and "polyic" 
 samples have a value of -1.
 
 
@@ -384,7 +387,7 @@ samples have a value of -1.
 treatment.matrix <- matrix(0, nrow=nrow(exprs(subset.data)), 
                            ncol=ncol(exprs(subset.data)))
 treatment.matrix[, which(pData(subset.data)$treatment=="mock")] <- 1
-treatment.matrix[, which(pData(subset.data)$treatment=="poly ic h")] <- -1
+treatment.matrix[, which(pData(subset.data)$treatment=="polyic")] <- -1
 
 # construct matrix to identify samples belonging to each patient
 patient.matrix <- model.matrix(~ptid, subset.data)
@@ -398,7 +401,7 @@ patient.matrix[which(pData(subset.data)$ptid != first.ptid), 1] <- 0
 exprs(subset.data) <- (exprs(subset.data) * treatment.matrix) %*% patient.matrix
 
 # limit data to one row per patient (just choose the one corresponding to poly-IC)
-pData(subset.data) <- pData(subset.data)[pData(subset.data)$treatment=="poly ic h", ]  
+pData(subset.data) <- pData(subset.data)[pData(subset.data)$treatment=="polyic", ]  
 ```
 
 ### Differential expression test: Part II
