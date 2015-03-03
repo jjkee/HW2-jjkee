@@ -63,7 +63,7 @@ img {
 <div id="header">
 <h1 class="title">Example: Differential Expression and Heatmap</h1>
 <h4 class="author"><em>Brian High</em></h4>
-<h4 class="date"><em>2/28/2015</em></h4>
+<h4 class="date"><em>March 3, 2015</em></h4>
 </div>
 
 
@@ -92,13 +92,23 @@ img {
 library(&quot;knitr&quot;)
 opts_chunk$set(tidy=FALSE, cache=TRUE, messages=FALSE, fig.width=5, fig.height=7)</code></pre>
 <p>Install the needed packages.</p>
-<pre class="r"><code>packages &lt;- c(&quot;GEOmetadb&quot;, &quot;GEOquery&quot;, &quot;limma&quot;, &quot;lumi&quot;, &quot;pheatmap&quot;, &quot;gplots&quot;)
+<pre class="r"><code>packages &lt;- c(&quot;GEOmetadb&quot;, &quot;GEOquery&quot;, &quot;limma&quot;, &quot;beadarray&quot;, &quot;lumi&quot;, &quot;pheatmap&quot;, &quot;gplots&quot;)
 source(&quot;http://bioconductor.org/biocLite.R&quot;)</code></pre>
 <pre><code>## Bioconductor version 3.0 (BiocInstaller 1.16.1), ?biocLite for help</code></pre>
 <pre class="r"><code>for (pkg in packages)
 {
     require(pkg, character.only = TRUE) || biocLite(pkg) 
 }</code></pre>
+<pre><code>## Loading required package: beadarray
+## Loading required package: ggplot2
+## Welcome to beadarray version 2.16.0
+## beadarray versions &gt;= 2.0.0 are substantial updates from beadarray 1.16.0 and earlier. Please see package vignette for details
+## 
+## Attaching package: 'beadarray'
+## 
+## The following object is masked from 'package:limma':
+## 
+##     imageplot</code></pre>
 </div>
 <div id="normal-analysis-workflow" class="section level2">
 <h2>Normal analysis workflow</h2>
@@ -129,14 +139,6 @@ if(!file.exists(&quot;GEOmetadb.sqlite&quot;))
   # Download database only if it's not done already
   getSQLiteFile()
 }</code></pre>
-<pre><code>## Unzipping...</code></pre>
-<pre><code>## Warning: closing unused connection 5
-## (http://gbnci.abcc.ncifcrf.gov/geo/GEOmetadb.sqlite.gz)</code></pre>
-<pre><code>## Metadata associate with downloaded file:
-##                 name               value
-## 1     schema version                 1.0
-## 2 creation timestamp 2015-02-14 19:49:57</code></pre>
-<pre><code>## [1] &quot;/home/high/Documents/HW3-jjkee/GEOmetadb.sqlite&quot;</code></pre>
 <p>Then we connect to the database and search for the paper by its title.</p>
 <pre class="r"><code>geo_con &lt;- dbConnect(SQLite(),'GEOmetadb.sqlite')
 query &lt;- &quot;SELECT gse.gse 
@@ -208,15 +210,12 @@ pData(gds) &lt;- sanitize_pdata(pData(gds))</code></pre>
 <blockquote>
 <p>Raw expression data were normalized using the quantile method provided by the beadarray package in R/Bioconductor (15).</p>
 </blockquote>
-<p>If we wanted to use the beadarray package, we could try this instead:</p>
+<p>If we wanted to use the beadarray package, we could try this:</p>
 <pre class="r"><code>library(beadarray)
-gds &lt;- neqc(gds)</code></pre>
-<p>Unfortunately, this will result in an error stating that the data object is of the wrong type. The <code>neqc</code> function expects an object of class EListRaw or a matrix containing raw intensities for regular and control probes from a series of microarrays.</p>
-<p>So, instead, we will use <code>limiN</code> from the lumi package.</p>
+gds &lt;- normaliseIllumina(gds,method='quantile')</code></pre>
+<p>Alternatively, we could also use <code>limiN</code> from the lumi package:</p>
 <pre class="r"><code>library(lumi)
 gds &lt;- lumiN(gds, method = &quot;quantile&quot;)</code></pre>
-<pre><code>## Perform quantile normalization ...</code></pre>
-<p>This succeeds because the <code>lumiN</code> function expects an ExpressionSet inherited object or a data matrix with columns as samples and rows as genes.</p>
 </div>
 <div id="select-the-macrophage-data" class="section level2">
 <h2>Select the macrophage data</h2>
@@ -234,13 +233,13 @@ exprs(macrophage.data) &lt;- exprs(macrophage.data)[, data.order]</code></pre>
 <div id="use-limma-to-test-for-differential-expression" class="section level2">
 <h2>Use limma to test for differential expression</h2>
 <p>This step is comprised of 2 parts. First we find the subset of genes (or probes) that are responsive to poly-IC treatment. Secondly, among the subset of genes, we find those that are differentially expressed between VL-/VL+ samples.</p>
+<div id="differential-expression-test-part-i" class="section level3">
+<h3>Differential expression test: Part I</h3>
+<p>So let’s find subset of probes (or genes) that are responsive to poly-IC treatment with FDR cutoff of 0.05 and fold change of &gt;1.5.</p>
 <p>From the paper:</p>
 <blockquote>
 <p>Poly(I·C) response signatures were generated based on (i) an absolute fold change of ≥1.5 relative to mock-treated samples and (ii) a statistically significant change in expression as determined by LIMMA (16) using a Benjamani-Hochberg false-discovery rate (FDR) cutoff q value of &lt;0.05.</p>
 </blockquote>
-<div id="differential-expression-test-part-i" class="section level3">
-<h3>Differential expression test: Part I</h3>
-<p>So let’s find subset of probes (or genes) that are responsive to poly-IC treatment with FDR cutoff of 0.05 and fold change of &gt;1.5.</p>
 <div id="test-for-differential-expression-with-limma" class="section level4">
 <h4>Test for differential expression with <code>limma</code></h4>
 <pre class="r"><code>library(limma)
@@ -252,35 +251,54 @@ ebay1 &lt;- eBayes(fit1)
 
 # Find differentially expressed genes (or probes) with FDR cutoff of 0.05 
 # and fold change of &gt;1.5
-topTable1 &lt;- topTable(ebay1, coef=&quot;treatmentpoly ic h&quot;, number=Inf, 
-                      p.value=0.05, lfc=log2(1.5), sort.by=&quot;p&quot;)</code></pre>
+topTable1 &lt;- topTable(ebay1, coef=&quot;treatmentpoly ic h&quot;, number=Inf, sort.by=&quot;p&quot;,
+                      adjust.method=&quot;BH&quot;, p.value=0.05, lfc=log2(1.5))</code></pre>
 <p>We should see 1146 probes (sum of upregulated and downregulated probe sets: 753 + 393 = 1146), according to the paper:</p>
 <blockquote>
 <p>After stimulation with TLR3 ligand poly(I·C) for 24 h, we identified 622 genes (corresponding to 753 probe sets) in macrophages that were significantly upregulated and 355 genes (corresponding to 393 probe sets) that were downregulated with an FDR cutoff of 0.05 and a fold change of &gt;1.5 (see Table S1 in the supplemental material).</p>
 </blockquote>
 <pre class="r"><code>nrow(topTable1)</code></pre>
 <pre><code>## [1] 1146</code></pre>
+<p>If you include <code>ptid</code> in the <code>model.matrix</code>, you will get 1153 probes, which does not match the number found in the paper.</p>
+<pre class="r"><code>library(limma)
+
+# Test for differential expression with limma
+design1 &lt;- model.matrix(~treatment+ptid, macrophage.data)  
+fit1 &lt;- lmFit(macrophage.data, design1)
+ebay1 &lt;- eBayes(fit1)
+
+# Find differentially expressed genes (or probes) with FDR cutoff of 0.05 
+# and fold change of &gt;1.5
+topTable1 &lt;- topTable(ebay1, coef=&quot;treatmentpoly ic h&quot;, number=Inf, sort.by=&quot;p&quot;,
+                      adjust.method=&quot;BH&quot;, p.value=0.05, lfc=log2(1.5))
+nrow(topTable1)</code></pre>
+<p>However, since you would expect to see some variability between patients, you might want to include the <code>ptid</code> in the matrix. How will that change the results?</p>
+<p>By the way, if you want to subset by P value and fold change after calculating the top table, you can do so as shown below:</p>
 <pre class="r"><code># Alternatively, you could do it like this ...
 topTable1 &lt;- topTable(ebay1, coef=&quot;treatmentpoly ic h&quot;, number=Inf)
-topTable1 &lt;- topTable1[topTable1$adj.P.Val &lt; 0.05 &amp; abs(topTable1$logFC)&gt;log2(1.5), ]
+topTable1 &lt;- topTable1[topTable1$adj.P.Val &lt; 0.05 &amp; abs(topTable1$logFC) &gt; log2(1.5), ]
 nrow(topTable1)</code></pre>
 </div>
 <div id="subset-for-the-number-of-probes-found" class="section level4">
 <h4>Subset for the number of probes found</h4>
 <p>We will need to subset the data, selecting data matching the probe IDs identified in our previous differential expression test.</p>
+<p>From the paper:</p>
+<blockquote>
+<p>To identify the genes that might be differentially expressed by macrophages of our subjects cohorts, we limited our analysis to the 977 poly(I·C)-responsive genes (1,146 probe sets).</p>
+</blockquote>
 <pre class="r"><code># Select the appropriate subset of data for further analysis
 topProbes1 &lt;- topTable1$Probe_Id
 subset.data &lt;- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]</code></pre>
-<p>For each probe found in previous step, we need to first calculate the fold change between each subject’s paired mock and poly-IC samples.</p>
-<p>From the paper:</p>
-<blockquote>
-<p>For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.</p>
-</blockquote>
 </div>
 </div>
 <div id="construct-multiplication-matrix" class="section level3">
 <h3>Construct multiplication matrix</h3>
-<p>Now construct a new matrix to multiply by the expression matrix, such that values that correspond to “mock” samples have a value of 1 and “poly ic h” samples have a value of -1.</p>
+<p>For each probe found in previous step, we need to first calculate the log fold change between each subject’s paired mock and poly-IC samples.</p>
+<p>From the paper:</p>
+<blockquote>
+<p>Fold changes were calculated between each subject’s paired mock and poly(I·C) sample, and then the fold change values for VL− patients were compared with those of VL+ patients to determine significant gene changes.</p>
+</blockquote>
+<p>Construct a new matrix to multiply by the expression matrix, such that values that correspond to “mock” samples have a value of 1 and “poly ic h” samples have a value of -1.</p>
 <pre class="r"><code>treatment.matrix &lt;- matrix(0, nrow=nrow(exprs(subset.data)), 
                            ncol=ncol(exprs(subset.data)))
 treatment.matrix[, which(pData(subset.data)$treatment==&quot;mock&quot;)] &lt;- 1
@@ -303,6 +321,10 @@ pData(subset.data) &lt;- pData(subset.data)[pData(subset.data)$treatment==&quot;
 <div id="differential-expression-test-part-ii" class="section level3">
 <h3>Differential expression test: Part II</h3>
 <p>Next, calculate the fold change for VL- patients compared with VL+ patients, also using <code>limma</code>.</p>
+<p>From the paper:</p>
+<blockquote>
+<p>For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.</p>
+</blockquote>
 <pre class="r"><code># Test for differential expression using limma
 design2 &lt;- model.matrix(~infection.status, subset.data)
 fit2 &lt;- lmFit(subset.data, design2)

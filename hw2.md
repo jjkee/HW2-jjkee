@@ -1,6 +1,6 @@
 # Example: Differential Expression and Heatmap
 Brian High  
-2/28/2015  
+March 3, 2015  
 
 ## Assignment
 
@@ -41,7 +41,7 @@ Install the needed packages.
 
 
 ```r
-packages <- c("GEOmetadb", "GEOquery", "limma", "lumi", "pheatmap", "gplots")
+packages <- c("GEOmetadb", "GEOquery", "limma", "beadarray", "lumi", "pheatmap", "gplots")
 source("http://bioconductor.org/biocLite.R")
 ```
 
@@ -54,6 +54,19 @@ for (pkg in packages)
 {
     require(pkg, character.only = TRUE) || biocLite(pkg) 
 }
+```
+
+```
+## Loading required package: beadarray
+## Loading required package: ggplot2
+## Welcome to beadarray version 2.16.0
+## beadarray versions >= 2.0.0 are substantial updates from beadarray 1.16.0 and earlier. Please see package vignette for details
+## 
+## Attaching package: 'beadarray'
+## 
+## The following object is masked from 'package:limma':
+## 
+##     imageplot
 ```
 
 ## Normal analysis workflow
@@ -91,26 +104,6 @@ if(!file.exists("GEOmetadb.sqlite"))
   # Download database only if it's not done already
   getSQLiteFile()
 }
-```
-
-```
-## Unzipping...
-```
-
-```
-## Warning: closing unused connection 5
-## (http://gbnci.abcc.ncifcrf.gov/geo/GEOmetadb.sqlite.gz)
-```
-
-```
-## Metadata associate with downloaded file:
-##                 name               value
-## 1     schema version                 1.0
-## 2 creation timestamp 2015-02-14 19:49:57
-```
-
-```
-## [1] "/home/high/Documents/HW3-jjkee/GEOmetadb.sqlite"
 ```
 
 Then we connect to the database and search for the paper by its title.
@@ -213,33 +206,21 @@ From the paper:
 
 > Raw expression data were normalized using the quantile method provided by the beadarray package in R/Bioconductor (15). 
 
-If we wanted to use the beadarray package, we could try this instead:
+If we wanted to use the beadarray package, we could try this:
 
 
 ```r
 library(beadarray)
-gds <- neqc(gds)
+gds <- normaliseIllumina(gds,method='quantile')
 ```
 
-Unfortunately, this will result in an error stating that the data object is of 
-the wrong type. The `neqc` function expects an object of class EListRaw or 
-a matrix containing raw intensities for regular and control probes from a series 
-of microarrays.
-
-So, instead, we will use `limiN` from the lumi package.
+Alternatively, we could also use `limiN` from the lumi package:
 
 
 ```r
 library(lumi)
 gds <- lumiN(gds, method = "quantile")
 ```
-
-```
-## Perform quantile normalization ...
-```
-
-This succeeds because the `lumiN` function expects an ExpressionSet inherited
-object or a data matrix with columns as samples and rows as genes.
 
 ## Select the macrophage data
 
@@ -273,14 +254,14 @@ of 2 parts. First we find the subset of genes (or probes) that are
 responsive to poly-IC treatment. Secondly, among the subset of genes, we find 
 those that are differentially expressed between VL-/VL+ samples.
 
-From the paper:
-
-> Poly(I·C) response signatures were generated based on (i) an absolute fold change of ≥1.5 relative to mock-treated samples and (ii) a statistically significant change in expression as determined by LIMMA (16) using a Benjamani-Hochberg false-discovery rate (FDR) cutoff q value of <0.05.
-
 ### Differential expression test: Part I
 
 So let's find subset of probes (or genes) that are responsive to poly-IC 
 treatment with FDR cutoff of 0.05 and fold change of >1.5.
+
+From the paper:
+
+> Poly(I·C) response signatures were generated based on (i) an absolute fold change of ≥1.5 relative to mock-treated samples and (ii) a statistically significant change in expression as determined by LIMMA (16) using a Benjamani-Hochberg false-discovery rate (FDR) cutoff q value of <0.05.
 
 #### Test for differential expression with `limma`
 
@@ -295,8 +276,8 @@ ebay1 <- eBayes(fit1)
 
 # Find differentially expressed genes (or probes) with FDR cutoff of 0.05 
 # and fold change of >1.5
-topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, 
-                      p.value=0.05, lfc=log2(1.5), sort.by="p")
+topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, sort.by="p",
+                      adjust.method="BH", p.value=0.05, lfc=log2(1.5))
 ```
 
 We should see 1146 probes (sum of upregulated and downregulated probe sets: 753 + 393 = 1146), according to the paper:
@@ -312,11 +293,37 @@ nrow(topTable1)
 ## [1] 1146
 ```
 
+If you include `ptid` in the `model.matrix`, you will get 1153 probes, which 
+does not match the number found in the paper. 
+
+
+```r
+library(limma)
+
+# Test for differential expression with limma
+design1 <- model.matrix(~treatment+ptid, macrophage.data)  
+fit1 <- lmFit(macrophage.data, design1)
+ebay1 <- eBayes(fit1)
+
+# Find differentially expressed genes (or probes) with FDR cutoff of 0.05 
+# and fold change of >1.5
+topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf, sort.by="p",
+                      adjust.method="BH", p.value=0.05, lfc=log2(1.5))
+nrow(topTable1)
+```
+
+However, since you would expect 
+to see some variability between patients, you might want to include the `ptid` 
+in the matrix. How will that change the results?
+
+By the way, if you want to subset by P value and fold change after calculating
+the top table, you can do so as shown below:
+
 
 ```r
 # Alternatively, you could do it like this ...
 topTable1 <- topTable(ebay1, coef="treatmentpoly ic h", number=Inf)
-topTable1 <- topTable1[topTable1$adj.P.Val < 0.05 & abs(topTable1$logFC)>log2(1.5), ]
+topTable1 <- topTable1[topTable1$adj.P.Val < 0.05 & abs(topTable1$logFC) > log2(1.5), ]
 nrow(topTable1)
 ```
 
@@ -325,6 +332,11 @@ nrow(topTable1)
 We will need to subset the data, selecting data matching the probe IDs
 identified in our previous differential expression test.
 
+From the paper:
+
+> To identify the genes that might be differentially expressed by macrophages of our subjects cohorts, we limited our analysis to the 977 poly(I·C)-responsive genes (1,146 probe sets).
+
+
 
 ```r
 # Select the appropriate subset of data for further analysis
@@ -332,16 +344,16 @@ topProbes1 <- topTable1$Probe_Id
 subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]
 ```
 
-For each probe found in previous step, we need to first calculate the fold 
+### Construct multiplication matrix
+
+For each probe found in previous step, we need to first calculate the log fold 
 change between each subject's paired mock and poly-IC samples.
 
 From the paper:
 
-> For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.
+> Fold changes were calculated between each subject's paired mock and poly(I·C) sample, and then the fold change values for VL− patients were compared with those of VL+ patients to determine significant gene changes.
 
-### Construct multiplication matrix
-
-Now construct a new matrix to multiply by the expression matrix, such that 
+Construct a new matrix to multiply by the expression matrix, such that 
 values that correspond to "mock" samples have a value of 1 and "poly ic h" 
 samples have a value of -1.
 
@@ -371,6 +383,10 @@ pData(subset.data) <- pData(subset.data)[pData(subset.data)$treatment=="poly ic 
 
 Next, calculate the fold change for VL- patients compared with VL+ patients, 
 also using `limma`.
+
+From the paper:
+
+> For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.
 
 
 ```r
@@ -445,7 +461,7 @@ library(pheatmap)
 pheatmap(exprs.data, cluster_cols=FALSE) 
 ```
 
-![](hw2_files/figure-html/unnamed-chunk-19-1.png) 
+![](hw2_files/figure-html/unnamed-chunk-20-1.png) 
 
 While the default settings produce a nice-looking heatmap, we will need to make
 some adjustments to approach the look of the published heatmap.
@@ -469,7 +485,7 @@ pheatmap(exprs.data, cluster_cols=FALSE, cluster_rows=TRUE,
 ## The "ward" method has been renamed to "ward.D"; note new "ward.D2"
 ```
 
-![](hw2_files/figure-html/unnamed-chunk-20-1.png) 
+![](hw2_files/figure-html/unnamed-chunk-21-1.png) 
 
 Using `pheatmap`, we got fairly close to the published figure, but the clustering 
 is still not exactly the same. It looks like it's flipped (vertically, 180 
@@ -495,7 +511,7 @@ heatmap(exprs.data, Colv=NA, labRow=NA, keep.dendro=FALSE,
         cexRow=0.5, cexCol=0.5, col=hmcols)
 ```
 
-![](hw2_files/figure-html/unnamed-chunk-21-1.png) 
+![](hw2_files/figure-html/unnamed-chunk-22-1.png) 
 
 ### Using `heatmap.2`
 
@@ -516,6 +532,6 @@ heatmap.2(exprs.data, scale="row", dendrogram = "none",
           )
 ```
 
-![](hw2_files/figure-html/unnamed-chunk-22-1.png) 
+![](hw2_files/figure-html/unnamed-chunk-23-1.png) 
 
 So, how could we add the custom dendrogram at the top of the figure as published?
