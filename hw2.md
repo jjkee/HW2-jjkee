@@ -50,23 +50,10 @@ source("http://bioconductor.org/biocLite.R")
 ```
 
 ```r
-for (pkg in packages)
+?for (pkg in packages)
 {
-    require(pkg, character.only = TRUE) || biocLite(pkg) 
+    require(pkg, character.only = TRUE, quietly = TRUE) || biocLite(pkg) 
 }
-```
-
-```
-## Loading required package: beadarray
-## Loading required package: ggplot2
-## Welcome to beadarray version 2.16.0
-## beadarray versions >= 2.0.0 are substantial updates from beadarray 1.16.0 and earlier. Please see package vignette for details
-## 
-## Attaching package: 'beadarray'
-## 
-## The following object is masked from 'package:limma':
-## 
-##     imageplot
 ```
 
 ## Normal analysis workflow
@@ -97,7 +84,7 @@ To do so, we will need to download the GEO SQLite database, `GEOmetadb`.
 
 
 ```r
-library(GEOmetadb)
+suppressMessages(library(GEOmetadb))
 # This will download the entire database, so can be slow
 if(!file.exists("GEOmetadb.sqlite"))
 {
@@ -145,11 +132,8 @@ if (file.exists(datafile)) {
 ```
 
 ```
-## ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE40nnn/GSE40812/matrix/
-## Found 1 file(s)
-## GSE40812_series_matrix.txt.gz
 ## File stored at: 
-## ./Data/GEO//GPL10558.soft
+## /tmp/RtmpCX9s0l/GPL10558.soft
 ```
 
 ## Sanitize the data
@@ -206,21 +190,41 @@ From the paper:
 
 > Raw expression data were normalized using the quantile method provided by the beadarray package in R/Bioconductor (15). 
 
-If we wanted to use the beadarray package, we could try this:
+If we wanted to use the beadarray package, we can run this:
 
 
 ```r
 library(beadarray)
-gds <- normaliseIllumina(gds,method='quantile')
 ```
 
-Alternatively, we could also use `limiN` from the lumi package:
+```
+## Loading required package: ggplot2
+```
+
+```
+## Warning in fun(libname, pkgname): couldn't connect to display ":0"
+```
+
+```
+## Welcome to beadarray version 2.16.0
+## beadarray versions >= 2.0.0 are substantial updates from beadarray 1.16.0 and earlier. Please see package vignette for details
+```
+
+```r
+gds <- normaliseIllumina(gds, method='quantile')
+```
+
+Alternatively, we can use `limiN` from the lumi package:
 
 
 ```r
 library(lumi)
 gds <- lumiN(gds, method = "quantile")
 ```
+
+Lastly, since we only need the macrophage data, you might want to wait to
+normalize until after you have selected only the macrophage data. It might 
+save a little time.
 
 ## Select the macrophage data
 
@@ -247,6 +251,9 @@ pData(macrophage.data) <- pData(macrophage.data)[data.order, ]
 exprs(macrophage.data) <- exprs(macrophage.data)[, data.order]
 ```
 
+This just needs to be done before producing the heatmap. You could do it later 
+in the process.
+
 ## Use limma to test for differential expression
 
 This step is comprised 
@@ -256,8 +263,8 @@ those that are differentially expressed between VL-/VL+ samples.
 
 ### Differential expression test: Part I
 
-So let's find subset of probes (or genes) that are responsive to poly-IC 
-treatment with FDR cutoff of 0.05 and fold change of >1.5.
+Find the subset of probes (or genes) that are responsive to poly-IC 
+treatment with FDR cutoff of 0.05 and absolute log2 fold change of >1.5.
 
 From the paper:
 
@@ -268,7 +275,22 @@ From the paper:
 
 ```r
 library(limma)
+```
 
+```
+## 
+## Attaching package: 'limma'
+## 
+## The following object is masked from 'package:beadarray':
+## 
+##     imageplot
+## 
+## The following object is masked from 'package:BiocGenerics':
+## 
+##     plotMA
+```
+
+```r
 # Test for differential expression with limma
 design1 <- model.matrix(~treatment, macrophage.data)  
 fit1 <- lmFit(macrophage.data, design1)
@@ -329,7 +351,7 @@ nrow(topTable1)
 
 #### Subset for the number of probes found
 
-We will need to subset the data, selecting data matching the probe IDs
+We will now subset the data, selecting data matching the probe IDs
 identified in our previous differential expression test.
 
 From the paper:
@@ -346,7 +368,7 @@ subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1,
 
 ### Construct multiplication matrix
 
-For each probe found in previous step, we need to first calculate the log fold 
+For each probe found in the previous step, we need to calculate the log fold 
 change between each subject's paired mock and poly-IC samples.
 
 From the paper:
@@ -521,6 +543,18 @@ can do a much better job of matching the heatmap in the paper.
 
 ```r
 library(gplots)
+```
+
+```
+## 
+## Attaching package: 'gplots'
+## 
+## The following object is masked from 'package:stats':
+## 
+##     lowess
+```
+
+```r
 hclust.ward <- function(x) hclust(x, method="ward.D2")
 dist.eucl <- function(x) dist(x, method="euclidean")
 heatmap.2(exprs.data, scale="row", dendrogram = "none",  

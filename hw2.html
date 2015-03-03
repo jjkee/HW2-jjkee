@@ -95,20 +95,10 @@ opts_chunk$set(tidy=FALSE, cache=TRUE, messages=FALSE, fig.width=5, fig.height=7
 <pre class="r"><code>packages &lt;- c(&quot;GEOmetadb&quot;, &quot;GEOquery&quot;, &quot;limma&quot;, &quot;beadarray&quot;, &quot;lumi&quot;, &quot;pheatmap&quot;, &quot;gplots&quot;)
 source(&quot;http://bioconductor.org/biocLite.R&quot;)</code></pre>
 <pre><code>## Bioconductor version 3.0 (BiocInstaller 1.16.1), ?biocLite for help</code></pre>
-<pre class="r"><code>for (pkg in packages)
+<pre class="r"><code>?for (pkg in packages)
 {
-    require(pkg, character.only = TRUE) || biocLite(pkg) 
+    require(pkg, character.only = TRUE, quietly = TRUE) || biocLite(pkg) 
 }</code></pre>
-<pre><code>## Loading required package: beadarray
-## Loading required package: ggplot2
-## Welcome to beadarray version 2.16.0
-## beadarray versions &gt;= 2.0.0 are substantial updates from beadarray 1.16.0 and earlier. Please see package vignette for details
-## 
-## Attaching package: 'beadarray'
-## 
-## The following object is masked from 'package:limma':
-## 
-##     imageplot</code></pre>
 </div>
 <div id="normal-analysis-workflow" class="section level2">
 <h2>Normal analysis workflow</h2>
@@ -132,7 +122,7 @@ source(&quot;http://bioconductor.org/biocLite.R&quot;)</code></pre>
 </blockquote>
 <p>However, we will look it up in GEO, just for practice, using the title of the paper as our search term.</p>
 <p>To do so, we will need to download the GEO SQLite database, <code>GEOmetadb</code>.</p>
-<pre class="r"><code>library(GEOmetadb)
+<pre class="r"><code>suppressMessages(library(GEOmetadb))
 # This will download the entire database, so can be slow
 if(!file.exists(&quot;GEOmetadb.sqlite&quot;))
 {
@@ -168,11 +158,8 @@ if (file.exists(datafile)) {
     # Query GEO for the GEO object matching the accession number
     gds &lt;- getGEO(accession, destdir = datadir)[[1]]  # getGEO returns a &quot;list&quot;
 }</code></pre>
-<pre><code>## ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE40nnn/GSE40812/matrix/
-## Found 1 file(s)
-## GSE40812_series_matrix.txt.gz
-## File stored at: 
-## ./Data/GEO//GPL10558.soft</code></pre>
+<pre><code>## File stored at: 
+## /tmp/RtmpCX9s0l/GPL10558.soft</code></pre>
 </div>
 <div id="sanitize-the-data" class="section level2">
 <h2>Sanitize the data</h2>
@@ -210,12 +197,17 @@ pData(gds) &lt;- sanitize_pdata(pData(gds))</code></pre>
 <blockquote>
 <p>Raw expression data were normalized using the quantile method provided by the beadarray package in R/Bioconductor (15).</p>
 </blockquote>
-<p>If we wanted to use the beadarray package, we could try this:</p>
-<pre class="r"><code>library(beadarray)
-gds &lt;- normaliseIllumina(gds,method='quantile')</code></pre>
-<p>Alternatively, we could also use <code>limiN</code> from the lumi package:</p>
+<p>If we wanted to use the beadarray package, we can run this:</p>
+<pre class="r"><code>library(beadarray)</code></pre>
+<pre><code>## Loading required package: ggplot2</code></pre>
+<pre><code>## Warning in fun(libname, pkgname): couldn't connect to display &quot;:0&quot;</code></pre>
+<pre><code>## Welcome to beadarray version 2.16.0
+## beadarray versions &gt;= 2.0.0 are substantial updates from beadarray 1.16.0 and earlier. Please see package vignette for details</code></pre>
+<pre class="r"><code>gds &lt;- normaliseIllumina(gds, method='quantile')</code></pre>
+<p>Alternatively, we can use <code>limiN</code> from the lumi package:</p>
 <pre class="r"><code>library(lumi)
 gds &lt;- lumiN(gds, method = &quot;quantile&quot;)</code></pre>
+<p>Lastly, since we only need the macrophage data, you might want to wait to normalize until after you have selected only the macrophage data. It might save a little time.</p>
 </div>
 <div id="select-the-macrophage-data" class="section level2">
 <h2>Select the macrophage data</h2>
@@ -229,22 +221,32 @@ gds &lt;- lumiN(gds, method = &quot;quantile&quot;)</code></pre>
                    order(treatment, infection.status, ptid))
 pData(macrophage.data) &lt;- pData(macrophage.data)[data.order, ]
 exprs(macrophage.data) &lt;- exprs(macrophage.data)[, data.order]</code></pre>
+<p>This just needs to be done before producing the heatmap. You could do it later in the process.</p>
 </div>
 <div id="use-limma-to-test-for-differential-expression" class="section level2">
 <h2>Use limma to test for differential expression</h2>
 <p>This step is comprised of 2 parts. First we find the subset of genes (or probes) that are responsive to poly-IC treatment. Secondly, among the subset of genes, we find those that are differentially expressed between VL-/VL+ samples.</p>
 <div id="differential-expression-test-part-i" class="section level3">
 <h3>Differential expression test: Part I</h3>
-<p>So let’s find subset of probes (or genes) that are responsive to poly-IC treatment with FDR cutoff of 0.05 and fold change of &gt;1.5.</p>
+<p>Find the subset of probes (or genes) that are responsive to poly-IC treatment with FDR cutoff of 0.05 and absolute log2 fold change of &gt;1.5.</p>
 <p>From the paper:</p>
 <blockquote>
 <p>Poly(I·C) response signatures were generated based on (i) an absolute fold change of ≥1.5 relative to mock-treated samples and (ii) a statistically significant change in expression as determined by LIMMA (16) using a Benjamani-Hochberg false-discovery rate (FDR) cutoff q value of &lt;0.05.</p>
 </blockquote>
 <div id="test-for-differential-expression-with-limma" class="section level4">
 <h4>Test for differential expression with <code>limma</code></h4>
-<pre class="r"><code>library(limma)
-
-# Test for differential expression with limma
+<pre class="r"><code>library(limma)</code></pre>
+<pre><code>## 
+## Attaching package: 'limma'
+## 
+## The following object is masked from 'package:beadarray':
+## 
+##     imageplot
+## 
+## The following object is masked from 'package:BiocGenerics':
+## 
+##     plotMA</code></pre>
+<pre class="r"><code># Test for differential expression with limma
 design1 &lt;- model.matrix(~treatment, macrophage.data)  
 fit1 &lt;- lmFit(macrophage.data, design1)
 ebay1 &lt;- eBayes(fit1)
@@ -281,7 +283,7 @@ nrow(topTable1)</code></pre>
 </div>
 <div id="subset-for-the-number-of-probes-found" class="section level4">
 <h4>Subset for the number of probes found</h4>
-<p>We will need to subset the data, selecting data matching the probe IDs identified in our previous differential expression test.</p>
+<p>We will now subset the data, selecting data matching the probe IDs identified in our previous differential expression test.</p>
 <p>From the paper:</p>
 <blockquote>
 <p>To identify the genes that might be differentially expressed by macrophages of our subjects cohorts, we limited our analysis to the 977 poly(I·C)-responsive genes (1,146 probe sets).</p>
@@ -293,7 +295,7 @@ subset.data &lt;- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbe
 </div>
 <div id="construct-multiplication-matrix" class="section level3">
 <h3>Construct multiplication matrix</h3>
-<p>For each probe found in previous step, we need to first calculate the log fold change between each subject’s paired mock and poly-IC samples.</p>
+<p>For each probe found in the previous step, we need to calculate the log fold change between each subject’s paired mock and poly-IC samples.</p>
 <p>From the paper:</p>
 <blockquote>
 <p>Fold changes were calculated between each subject’s paired mock and poly(I·C) sample, and then the fold change values for VL− patients were compared with those of VL+ patients to determine significant gene changes.</p>
@@ -395,8 +397,14 @@ heatmap(exprs.data, Colv=NA, labRow=NA, keep.dendro=FALSE,
 <div id="using-heatmap.2" class="section level3">
 <h3>Using <code>heatmap.2</code></h3>
 <p>Instead, if we use the <code>heatmap.2</code> function from the gplots package, we can do a much better job of matching the heatmap in the paper.</p>
-<pre class="r"><code>library(gplots)
-hclust.ward &lt;- function(x) hclust(x, method=&quot;ward.D2&quot;)
+<pre class="r"><code>library(gplots)</code></pre>
+<pre><code>## 
+## Attaching package: 'gplots'
+## 
+## The following object is masked from 'package:stats':
+## 
+##     lowess</code></pre>
+<pre class="r"><code>hclust.ward &lt;- function(x) hclust(x, method=&quot;ward.D2&quot;)
 dist.eucl &lt;- function(x) dist(x, method=&quot;euclidean&quot;)
 heatmap.2(exprs.data, scale=&quot;row&quot;, dendrogram = &quot;none&quot;,  
           symkey=FALSE, density.info=&quot;none&quot;, trace=&quot;none&quot;, 
