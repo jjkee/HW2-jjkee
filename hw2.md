@@ -1,11 +1,6 @@
----
-title: "Example: Differential Expression and Heatmap"
-author: "Brian High"
-date: "March 3, 2015"
-output: 
-    html_document:
-        keep_md: yes
----
+# Example: Differential Expression and Heatmap
+Brian High  
+March 3, 2015  
 
 ## Assignment
 
@@ -35,7 +30,8 @@ Turn on Knitr cache and set other options.
 The code for this code chunk, with slight modification, was taken from 
 [raphg](https://github.com/raphg/Biostat-578).
 
-```{r, cache=FALSE}
+
+```r
 # Set some global knitr options
 library("knitr")
 opts_chunk$set(tidy=FALSE, cache=TRUE, messages=FALSE, fig.width=5, fig.height=7)
@@ -43,9 +39,17 @@ opts_chunk$set(tidy=FALSE, cache=TRUE, messages=FALSE, fig.width=5, fig.height=7
 
 Install the needed packages.
 
-```{r, echo=TRUE, warn.conflicts = FALSE}
+
+```r
 packages <- c("GEOmetadb", "GEOquery", "limma", "beadarray", "lumi", "pheatmap", "gplots")
 source("http://bioconductor.org/biocLite.R")
+```
+
+```
+## Bioconductor version 3.0 (BiocInstaller 1.16.1), ?biocLite for help
+```
+
+```r
 ?for (pkg in packages)
 {
     require(pkg, character.only = TRUE, quietly = TRUE) || biocLite(pkg) 
@@ -78,7 +82,8 @@ the paper as our search term.
 
 To do so, we will need to download the GEO SQLite database, `GEOmetadb`.
 
-```{r, echo=TRUE, quietly=TRUE}
+
+```r
 suppressMessages(library(GEOmetadb))
 # This will download the entire database, so can be slow
 if(!file.exists("GEOmetadb.sqlite"))
@@ -90,7 +95,8 @@ if(!file.exists("GEOmetadb.sqlite"))
 
 Then we connect to the database and search for the paper by its title.
 
-```{r, echo=TRUE}
+
+```r
 geo_con <- dbConnect(SQLite(),'GEOmetadb.sqlite')
 query <- "SELECT gse.gse 
             FROM gse 
@@ -103,7 +109,8 @@ res <- dbGetQuery(geo_con, query)
 
 Now we can load the GEO object into an "eset" object (of class "ExpressionSet").
 
-```{r, echo=TRUE}
+
+```r
 library(GEOquery)
 
 # Create the data folder if it does not already exist
@@ -124,6 +131,11 @@ if (file.exists(datafile)) {
 }
 ```
 
+```
+## File stored at: 
+## /tmp/RtmpBPddJS/GPL10558.soft
+```
+
 ## Sanitize the data
 
 We only need data for the macrophage "cell type". This is specificed as 
@@ -142,7 +154,8 @@ above. So, one could also parse this "title" to extract the other needed factors
 The method used to sanitize the data is similar to what was covered in 
 [lecture](https://github.com/raphg/Biostat-578/blob/master/Prediction.Rmd).
 
-```{r, echo=TRUE}
+
+```r
 # Function to sanitize data
 sanitize_pdata <- function(pd) {
     # Remove columns we don't need
@@ -180,14 +193,32 @@ From the paper:
 
 If we wanted to use the beadarray package, we can run this:
 
-```{r, echo=TRUE, eval=TRUE}
+
+```r
 library(beadarray)
+```
+
+```
+## Loading required package: ggplot2
+```
+
+```
+## Warning in fun(libname, pkgname): couldn't connect to display ":0"
+```
+
+```
+## Welcome to beadarray version 2.16.0
+## beadarray versions >= 2.0.0 are substantial updates from beadarray 1.16.0 and earlier. Please see package vignette for details
+```
+
+```r
 gds <- normaliseIllumina(gds, method='quantile')
 ```
 
 Alternatively, we can use `limiN` from the lumi package:
 
-```{r, echo=TRUE, eval=FALSE}
+
+```r
 library(lumi)    # This takes a while to load
 gds <- lumiN(gds, method = "quantile")
 ```
@@ -201,7 +232,8 @@ save a little time.
 We will only be looking at the macrophage "cell type" so we select only 
 the macrophage data from eset data object. 
 
-```{r, eval=TRUE}
+
+```r
 macrophage.data <- gds[, pData(gds)$cell.type=="monocyte-derived macrophage"]
 ```
 
@@ -212,7 +244,8 @@ vs mock), infection status (VL- vs VL+) and patient ID. This allows us
 to better reproduce the figure 2 heatmap by arranging the samples (columns) 
 as they are presented in that figure.
 
-```{r, echo=TRUE}
+
+```r
 data.order <- with(pData(macrophage.data), 
                    order(treatment, infection.status, ptid))
 pData(macrophage.data) <- pData(macrophage.data)[data.order, ]
@@ -240,9 +273,25 @@ From the paper:
 
 #### Test for differential expression with `limma`
 
-```{r, echo=TRUE}
-library(limma)
 
+```r
+library(limma)
+```
+
+```
+## 
+## Attaching package: 'limma'
+## 
+## The following object is masked from 'package:beadarray':
+## 
+##     imageplot
+## 
+## The following object is masked from 'package:BiocGenerics':
+## 
+##     plotMA
+```
+
+```r
 # Test for differential expression with limma
 design1 <- model.matrix(~treatment+ptid, macrophage.data)  
 fit1 <- lmFit(macrophage.data, design1)
@@ -258,8 +307,13 @@ We should see 1146 probes (sum of upregulated and downregulated probe sets: 753 
 
 > After stimulation with TLR3 ligand poly(I·C) for 24 h, we identified 622 genes (corresponding to 753 probe sets) in macrophages that were significantly upregulated and 355 genes (corresponding to 393 probe sets) that were downregulated with an FDR cutoff of 0.05 and a fold change of >1.5 (see Table S1 in the supplemental material).
 
-```{r, echo=TRUE}
+
+```r
 nrow(topTable1)
+```
+
+```
+## [1] 1153
 ```
 
 Why didn't we get 1146 probes? Because we included the `ptid` in the design 
@@ -270,7 +324,8 @@ Since you would expect to see some variability between patients, we include
 
 To try a model just using `treatment`, you could run: 
 
-```{r, echo=TRUE, eval=FALSE}
+
+```r
 library(limma)
 
 # Test for differential expression with limma
@@ -290,7 +345,8 @@ nrow(topTable1)
 By the way, if you want to subset by P value and fold change after calculating
 the top table, you can do so as shown below:
 
-```{r, echo=TRUE, eval=FALSE}
+
+```r
 # Alternatively, you could do it like this ...
 topTable1 <- topTable(ebay1, coef="treatmentpolyic", number=Inf)
 topTable1 <- topTable1[topTable1$adj.P.Val < 0.05 & abs(topTable1$logFC) > log2(1.5), ]
@@ -306,7 +362,8 @@ From the paper:
 
 > To identify the genes that might be differentially expressed by macrophages of our subjects cohorts, we limited our analysis to the 977 poly(I·C)-responsive genes (1,146 probe sets).
 
-```{r, echo=TRUE}
+
+```r
 # Select the appropriate subset of data for further analysis
 topProbes1 <- topTable1$Probe_Id
 subset.data <- macrophage.data[rownames(exprs(macrophage.data)) %in% topProbes1, ]
@@ -325,7 +382,8 @@ Construct a new matrix to multiply by the expression matrix, such that
 values that correspond to "mock" samples have a value of 1 and "polyic" 
 samples have a value of -1.
 
-```{r, echo=TRUE}
+
+```r
 treatment.matrix <- matrix(0, nrow=nrow(exprs(subset.data)), 
                            ncol=ncol(exprs(subset.data)))
 treatment.matrix[, which(pData(subset.data)$treatment=="mock")] <- 1
@@ -355,7 +413,8 @@ From the paper:
 
 > For each probe set corresponding to a gene, a fold change was computed by comparing differential expression in VL− and VL+ samples, as described above.
 
-```{r, echo=TRUE}
+
+```r
 # Test for differential expression using limma
 design2 <- model.matrix(~infection.status, subset.data)
 fit2 <- lmFit(subset.data, design2)
@@ -373,10 +432,29 @@ Let's check if the number of probes and genes reported in the paper are the
 same as what we have found. The paper reported finding 43 differentially 
 expressed probes (30 upregulated in VL- samples, 13 upregulated in VL+ samples).
 
-```{r, echo=TRUE}
+
+```r
 length(topProbes2)  ## number of probes
+```
+
+```
+## [1] 43
+```
+
+```r
 sum(topTable2$logFC > 0)  ## number of upregulated probes in VL+ samples
+```
+
+```
+## [1] 30
+```
+
+```r
 sum(topTable2$logFC < 0)  ## number of upregulated probes in VL- samples
+```
+
+```
+## [1] 13
 ```
 
 From the paper:
@@ -388,7 +466,8 @@ From the paper:
 The assignment gave us a hint to use the pheatmap package. First, we'll do some
 data preparation.
 
-```{r, echo=TRUE}
+
+```r
 # Select only those probes matched in the previous differential expression step
 exprs.data <- exprs(macrophage.data)[
     rownames(exprs(macrophage.data)) %in% topProbes2, ]
@@ -401,10 +480,13 @@ colnames(exprs.data) <- paste(pData(macrophage.data)$treatment,
 
 Next, plot using `pheatmap` defaults, except only cluster rows, not columns.
 
-```{r,echo=TRUE}
+
+```r
 library(pheatmap)
 pheatmap(exprs.data, cluster_cols=FALSE) 
 ```
+
+![](hw2_files/figure-html/unnamed-chunk-20-1.png) 
 
 While the default settings produce a nice-looking heatmap, we will need to make
 some adjustments to approach the look of the published heatmap.
@@ -413,7 +495,8 @@ some adjustments to approach the look of the published heatmap.
 
 Primarily, we will use a different color pallete and clustering method.
 
-```{r, echo=TRUE}
+
+```r
 drows <- dist(exprs.data, method = "euclidean")
 hmcols<-colorRampPalette(c("red", "orange", "lightyellow"))(20)
 pheatmap(exprs.data, cluster_cols=FALSE, cluster_rows=TRUE, 
@@ -422,6 +505,12 @@ pheatmap(exprs.data, cluster_cols=FALSE, cluster_rows=TRUE,
          color = hmcols
          ) 
 ```
+
+```
+## The "ward" method has been renamed to "ward.D"; note new "ward.D2"
+```
+
+![](hw2_files/figure-html/unnamed-chunk-21-1.png) 
 
 Using `pheatmap`, we got fairly close to the published figure, but the clustering 
 is still not exactly the same. It looks like it's flipped (vertically, 180 
@@ -437,7 +526,8 @@ We can also use `heatmap` from the stats package, though even with
 `keep.dendro=FALSE`, the dendrogram persists. The clustering is a better 
 match to the published figure.
 
-```{r, echo=TRUE}
+
+```r
 library(stats)
 hmcols<-colorRampPalette(c("red", "orange", "lightyellow"))(20)
 heatmap(exprs.data, Colv=NA, labRow=NA, keep.dendro=FALSE, 
@@ -446,13 +536,28 @@ heatmap(exprs.data, Colv=NA, labRow=NA, keep.dendro=FALSE,
         cexRow=0.5, cexCol=0.5, col=hmcols)
 ```
 
+![](hw2_files/figure-html/unnamed-chunk-22-1.png) 
+
 ### Using `heatmap.2`
 
 Instead, if we use the `heatmap.2` function from the gplots package, we 
 can do a much better job of matching the heatmap in the paper. 
 
-```{r, echo=TRUE}
+
+```r
 library(gplots)
+```
+
+```
+## 
+## Attaching package: 'gplots'
+## 
+## The following object is masked from 'package:stats':
+## 
+##     lowess
+```
+
+```r
 hclust.ward <- function(x) hclust(x, method="ward.D2")
 dist.eucl <- function(x) dist(x, method="euclidean")
 heatmap.2(exprs.data, scale="row", dendrogram = "none",  
@@ -463,5 +568,7 @@ heatmap.2(exprs.data, scale="row", dendrogram = "none",
           key=TRUE, keysize=1.0
           )
 ```
+
+![](hw2_files/figure-html/unnamed-chunk-23-1.png) 
 
 So, how could we add the custom dendrogram at the top of the figure as published?
